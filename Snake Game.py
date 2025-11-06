@@ -35,6 +35,8 @@ score = 0
 direction = "RIGHT"
 speed = 8
 game_over = False
+you_win = False  # 🏆 Win flag
+WIN_SCORE = 20   # 🏆 Score needed to win
 
 cap = cv2.VideoCapture(0)
 cap.set(3, width + 100)
@@ -91,9 +93,19 @@ def check_collision(snake):
 
 def generate_food():
     return (
-        random.randrange(50, width-50 - snake_size, snake_size),
-        random.randrange(25, height-25 - snake_size, snake_size)
+        random.randrange(50, width - 50 - snake_size, snake_size),
+        random.randrange(25, height - 25 - snake_size, snake_size)
     )
+
+def reset_game():
+    """Reset the game after winning or losing"""
+    global snake, direction, score, food, game_over, you_win
+    snake = [(100, 100), (80, 100), (60, 100)]
+    direction = "RIGHT"
+    score = 0
+    food = generate_food()
+    game_over = False
+    you_win = False
 
 # --- Main loop ---
 print("🖐️ Move your index finger to control the snake!")
@@ -108,7 +120,41 @@ while True:
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = hands.process(rgb)
 
-    # Finger control
+    # --- Win Screen 🏆 ---
+    if you_win:
+        cv2.putText(frame, "🎉 YOU WIN! 🎉", (width // 3, height // 2 - 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.8, (0, 255, 0), 5)
+        cv2.putText(frame, f"Final Score: {score}", (width // 3 + 50, height // 2 + 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 3)
+        cv2.putText(frame, "Press 'R' to Restart or 'ESC' to Exit",
+                    (width // 3 - 60, height // 2 + 100),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+
+        cv2.imshow("Snake Finger Control", frame)
+        key = cv2.waitKey(10) & 0xFF
+        if key == 27:
+            break
+        elif key == ord('r'):
+            reset_game()
+        continue
+
+    # --- Game Over Screen ---
+    if game_over:
+        cv2.putText(frame, "GAME OVER", (width // 3, height // 2 - 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.8, (0, 0, 255), 5)
+        cv2.putText(frame, "Press 'R' to Restart or 'ESC' to Exit",
+                    (width // 3 - 80, height // 2 + 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+        cv2.imshow("Snake Finger Control", frame)
+
+        key = cv2.waitKey(10) & 0xFF
+        if key == 27:
+            break
+        elif key == ord('r'):
+            reset_game()
+        continue
+
+    # --- Finger control ---
     if results.multi_hand_landmarks:
         for hand_landmarks in results.multi_hand_landmarks:
             mp_draw.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
@@ -125,7 +171,7 @@ while True:
             else:
                 direction = "DOWN" if dy > 0 else "UP"
 
-    # Move snake
+    # --- Move snake ---
     head_x, head_y = snake[0]
     if direction == "UP":
         head_y -= speed
@@ -138,44 +184,30 @@ while True:
     new_head = (int(head_x), int(head_y))
     snake.insert(0, new_head)
 
-    # Eat food
+    # --- Eat food ---
     if abs(snake[0][0] - food[0]) < apple_size and abs(snake[0][1] - food[1]) < apple_size:
         score += 1
         food = generate_food()
+        if score >= WIN_SCORE:  # 🏆 Check win condition
+            you_win = True
     else:
         snake.pop()
 
-    # Check collisions
+    # --- Check collisions ---
     if check_collision(snake):
         game_over = True
 
-    # Draw body first
+    # --- Draw everything ---
     draw_snake_body(frame, snake)
-
-    # Draw food
     frame = overlay_image(frame, app, food[0], food[1])
-
-    # Draw score
     cv2.putText(frame, f"Score: {score}", (10, 30),
                 cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
-
-    # Draw head last — always on top
     frame = draw_snake_head(frame, snake, direction)
 
-    if game_over:
-        cv2.putText(frame, "GAME OVER", (200, 240),
-                    cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 4)
-        cv2.imshow("Snake Finger Control", frame)
-        cv2.waitKey(2000)
-        snake = [(100, 100), (80, 100), (60, 100)]
-        direction = "RIGHT"
-        score = 0
-        food = generate_food()
-        game_over = False
-        continue
-
+    # --- Display ---
     cv2.imshow("Snake Finger Control", frame)
-    if cv2.waitKey(10) & 0xFF == 27:
+    key = cv2.waitKey(10) & 0xFF
+    if key == 27:
         break
 
 cap.release()

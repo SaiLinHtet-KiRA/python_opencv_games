@@ -21,6 +21,7 @@ BULLET_SPEED = 10
 ENEMY_SPEED = 5
 SPAWN_RATE = 30  # lower = more frequent
 FIRE_INTERVAL = 0.5  # seconds between shots
+WIN_SCORE = 20  # 🏆 Win condition threshold
 
 # --- Load images ---
 player_img = cv2.imread("images/space ship.png", cv2.IMREAD_UNCHANGED)
@@ -40,8 +41,6 @@ mp_draw = mp.solutions.drawing_utils
 def overlay_image_alpha(img, img_overlay, x, y):
     """Overlay img_overlay on top of img at position (x, y) with alpha channel."""
     h, w = img_overlay.shape[:2]
-
-    # Clip overlay if it goes out of frame
     if x < 0:
         img_overlay = img_overlay[:, -x:]
         w += x
@@ -56,11 +55,8 @@ def overlay_image_alpha(img, img_overlay, x, y):
     if y + h > img.shape[0]:
         img_overlay = img_overlay[:img.shape[0] - y, :]
         h = img_overlay.shape[0]
-
     if h <= 0 or w <= 0:
         return
-
-    # Apply alpha blending
     if img_overlay.shape[2] == 4:
         alpha_mask = img_overlay[:, :, 3] / 255.0
         for c in range(3):
@@ -90,6 +86,7 @@ def reset_game():
 # --- Initialize game state ---
 player_x, player_y, bullets, enemies, score, last_fire_time = reset_game()
 game_over = False
+you_win = False  # 🏆 Win flag
 
 # --- Game loop ---
 while True:
@@ -98,10 +95,7 @@ while True:
         break
 
     frame = cv2.flip(frame, 1)
-
-    # ✅ Resize webcam frame to fit full screen
     frame = cv2.resize(frame, (WIDTH, HEIGHT))
-
     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     result = hands.process(frame_rgb)
 
@@ -123,6 +117,24 @@ while True:
             game_over = False
         continue
 
+    # --- You Win Screen 🏆 ---
+    if you_win:
+        cv2.putText(frame, f"YOU WIN! Final Score: {score}",
+                    (WIDTH // 3, HEIGHT // 2 - 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
+        cv2.putText(frame, "Press 'R' to Play Again or 'ESC' to Exit",
+                    (WIDTH // 3 - 80, HEIGHT // 2 + 40),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+        cv2.imshow("Space Shooter", frame)
+
+        key = cv2.waitKey(1) & 0xFF
+        if key == 27:
+            break
+        elif key == ord('r'):
+            player_x, player_y, bullets, enemies, score, last_fire_time = reset_game()
+            you_win = False
+        continue
+
     # --- Hand tracking (move player) ---
     if result.multi_hand_landmarks:
         for handLms in result.multi_hand_landmarks:
@@ -140,7 +152,7 @@ while True:
     # --- Update bullets ---
     bullets = [[bx, by - BULLET_SPEED] for bx, by in bullets if by > 0]
 
-    # --- Spawn enemies with random spin ---
+    # --- Spawn enemies ---
     if random.randint(1, SPAWN_RATE) == 1:
         ex = random.randint(0, WIDTH - ENEMY_WIDTH)
         angle = random.randint(0, 360)
@@ -171,6 +183,10 @@ while True:
                 player_y < ey + ENEMY_HEIGHT and player_y + PLAYER_HEIGHT > ey):
             game_over = True
 
+    # 🏆 Check win condition
+    if score >= WIN_SCORE:
+        you_win = True
+
     # --- Draw player ---
     overlay_image_alpha(frame, player_img, player_x, player_y)
 
@@ -191,7 +207,7 @@ while True:
     cv2.imshow("Space Shooter", frame)
 
     key = cv2.waitKey(1) & 0xFF
-    if key == 27:  # ESC
+    if key == 27:
         break
 
 cap.release()
